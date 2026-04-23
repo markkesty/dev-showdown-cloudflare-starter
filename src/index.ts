@@ -1,5 +1,5 @@
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible';
-import {generateText} from 'ai';
+import {generateText, streamText} from 'ai';
 
 const INTERACTION_ID_HEADER = 'X-Interaction-Id';
 
@@ -101,6 +101,19 @@ export default {
 				return Response.json({
 					answer: `The weather in ${weatherData.city} is currently ${weatherData.temperatureFahrenheit}\u00B0F.`,
 				});
+			}
+			case 'RESPONSE_STREAMING': {
+				if (!env.DEV_SHOWDOWN_API_KEY) {
+					throw new Error('DEV_SHOWDOWN_API_KEY is required');
+				}
+
+				const streamLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+				const streamResult = streamText({
+					model: streamLlm.chatModel('deli-4'),
+					prompt: payload.prompt,
+				});
+
+				return streamResult.toTextStreamResponse();
 			}
 			default:
 				return new Response('Solver not found', {status: 404});
