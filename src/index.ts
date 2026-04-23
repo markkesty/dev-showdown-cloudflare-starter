@@ -1,5 +1,5 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { generateText } from 'ai';
+import {createOpenAICompatible} from '@ai-sdk/openai-compatible';
+import {generateText} from 'ai';
 
 const INTERACTION_ID_HEADER = 'X-Interaction-Id';
 
@@ -8,7 +8,7 @@ export default {
 		const url = new URL(request.url);
 
 		if (request.method !== 'POST' || url.pathname !== '/api') {
-			return new Response('Not Found', { status: 404 });
+			return new Response('Not Found', {status: 404});
 		}
 
 		const challengeType = url.searchParams.get('challengeType');
@@ -48,11 +48,27 @@ export default {
 					answer: result.text || 'N/A',
 				});
 			}
-				default:
-					return new Response('Solver not found', { status: 404 });
+			case 'JSON_MODE': {
+				if (!env.DEV_SHOWDOWN_API_KEY) {
+					throw new Error('DEV_SHOWDOWN_API_KEY is required');
+				}
+
+				const workshopLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+				const result = await generateText({
+					model: workshopLlm.chatModel('deli-4'),
+					system: 'You are a trivia question player. Answer the question correctly and concisely.',
+					prompt: payload.question,
+				});
+
+				return Response.json({
+					answer: result.text || 'N/A',
+				});
 			}
-		},
-	} satisfies ExportedHandler<Env>;
+			default:
+				return new Response('Solver not found', {status: 404});
+		}
+	},
+} satisfies ExportedHandler<Env>;
 
 function createWorkshopLlm(apiKey: string, interactionId: string) {
 	return createOpenAICompatible({
