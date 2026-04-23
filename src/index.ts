@@ -88,12 +88,8 @@ export default {
 				});
 				const weatherData = await weatherRes.json<any>();
 
-				// Find the temperature value from whatever field name the API uses
-				const temp = weatherData.temperature ?? weatherData.temp ?? weatherData.current?.temperature ?? weatherData.current?.temp;
-				const description = weatherData.description ?? weatherData.weather ?? weatherData.condition ?? '';
-
 				return Response.json({
-					answer: `The weather in ${city} is currently ${temp ?? JSON.stringify(weatherData)}.`,
+					answer: `The weather in ${weatherData.city} is currently ${weatherData.temperatureFahrenheit}\u00B0F.`,
 				});
 			}
 			default:
