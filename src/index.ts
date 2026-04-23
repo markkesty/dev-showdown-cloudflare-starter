@@ -1,6 +1,5 @@
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible';
-import {generateObject, generateText} from 'ai';
-import {z} from 'zod';
+import {generateText} from 'ai';
 
 const INTERACTION_ID_HEADER = 'X-Interaction-Id';
 
@@ -55,38 +54,23 @@ export default {
 				}
 
 				const jsonLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
-
-				const productSchema = z.object({
-					name: z.string(),
-					price: z.number(),
-					currency: z.string(),
-					inStock: z.boolean(),
-					dimensions: z.object({
-						length: z.number(),
-						width: z.number(),
-						height: z.number(),
-						unit: z.string(),
-					}),
-					manufacturer: z.object({
-						name: z.string(),
-						country: z.string(),
-						website: z.string(),
-					}),
-					specifications: z.object({
-						weight: z.number(),
-						weightUnit: z.string(),
-						warrantyMonths: z.number(),
-					}),
-				});
-
-				const jsonResult = await generateObject({
+				const jsonResult = await generateText({
 					model: jsonLlm.chatModel('deli-4'),
-					schema: productSchema,
-					system: `Extract structured product information from the given description. Return exact values from the text. For inStock: "in stock" = true, "out of stock" = false. For dimensions, extract the numeric values and unit. For warranty, extract the number of months.`,
+					system: `Extract structured product information from the description. Return ONLY a valid JSON object with this exact structure, no markdown fences:
+{
+  "name": "<full product name>",
+  "price": <number>,
+  "currency": "<3-letter code>",
+  "inStock": <true if "in stock", false if "out of stock">,
+  "dimensions": { "length": <number>, "width": <number>, "height": <number>, "unit": "<unit>" },
+  "manufacturer": { "name": "<name>", "country": "<country>", "website": "<url>" },
+  "specifications": { "weight": <number>, "weightUnit": "<unit>", "warrantyMonths": <number> }
+}`,
 					prompt: payload.description,
 				});
 
-				return Response.json(jsonResult.object);
+				const parsed = JSON.parse(jsonResult.text.replace(/```json\n?|```\n?/g, '').trim());
+				return Response.json(parsed);
 			}
 			default:
 				return new Response('Solver not found', {status: 404});
