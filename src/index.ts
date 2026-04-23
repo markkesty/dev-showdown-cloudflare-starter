@@ -73,24 +73,55 @@ export default {
 				return Response.json(parsed);
 			}
 			case 'BASIC_TOOL_CALL': {
-				// Extract city from question - match "in <City>" pattern
-				const cityMatch = payload.question.match(/\bin\s+([A-Z][a-zA-Z\s]+?)(?:\s+right now|\s+today|\s+currently|\s+at the moment|\?|$)/i);
-				const city = cityMatch ? cityMatch[1].trim() : payload.question;
+				if (!env.DEV_SHOWDOWN_API_KEY) {
+					throw new Error('DEV_SHOWDOWN_API_KEY is required');
+				}
 
-				// Call weather API
-				const weatherRes = await fetch('https://devshowdown.com/api/weather', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						[INTERACTION_ID_HEADER]: interactionId,
+				const toolLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+				const toolResult = await generateText({
+					model: toolLlm.chatModel('deli-4'),
+					system: 'You answer weather questions. Use the getWeather tool to look up the weather, then answer the user with a sentence that includes the temperature.',
+					prompt: payload.question,
+					tools: {
+						getWeather: {
+							description: 'Get current weather for a city',
+							parameters: {
+								type: 'object' as const,
+								properties: {
+									city: { type: 'string' as const, description: 'The city name' },
+								},
+								required: ['city'],
+							},
+							execute: async ({ city }: { city: string }) => {
+								const res = await fetch('https://devshowdown.com/api/weather', {
+									method: 'POST',
+									headers: {
+										'Content-Type': 'application/json',
+										[INTERACTION_ID_HEADER]: interactionId,
+									},
+									body: JSON.stringify({ city }),
+								});
+								return await res.json();
+							},
+						},
 					},
-					body: JSON.stringify({ city }),
+					maxSteps: 3,
 				});
-				const weatherData = await weatherRes.json<any>();
 
-				return Response.json({
-					answer: `The weather in ${weatherData.city} is currently ${weatherData.temperatureFahrenheit}\u00B0F.`,
-				});
+				// Fallback: if LLM text is empty, build answer from tool results
+				let answer = toolResult.text;
+				if (!answer) {
+					for (const step of toolResult.steps) {
+						for (const result of step.toolResults) {
+							const data = result.result as any;
+							if (data?.temperatureFahrenheit != null) {
+								answer = `The weather in ${data.city} is currently ${data.temperatureFahrenheit}\u00B0F.`;
+							}
+						}
+					}
+				}
+
+				return Response.json({ answer: answer || 'Unable to fetch weather.' });
 			}
 			default:
 				return new Response('Solver not found', {status: 404});
