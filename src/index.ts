@@ -77,39 +77,29 @@ export default {
 					throw new Error('DEV_SHOWDOWN_API_KEY is required');
 				}
 
+				// Extract city name using LLM
 				const toolLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
-
-				const toolResult = await generateText({
+				const cityResult = await generateText({
 					model: toolLlm.chatModel('deli-4'),
-					system: 'You answer questions about weather. Use the getWeather tool to fetch current weather data, then respond with a natural language answer that includes the temperature.',
+					system: 'Extract the city name from the question. Reply with ONLY the city name, nothing else.',
 					prompt: payload.question,
-					tools: {
-						getWeather: {
-							description: 'Get current weather for a city',
-							parameters: {
-								type: 'object' as const,
-								properties: {
-									city: { type: 'string' as const, description: 'City name' },
-								},
-								required: ['city'],
-							},
-							execute: async ({ city }: { city: string }) => {
-								const weatherRes = await fetch('https://devshowdown.com/api/weather', {
-									method: 'POST',
-									headers: {
-										'Content-Type': 'application/json',
-										[INTERACTION_ID_HEADER]: interactionId,
-									},
-									body: JSON.stringify({ city }),
-								});
-								return await weatherRes.json();
-							},
-						},
-					},
-					maxSteps: 3,
 				});
+				const city = cityResult.text.trim();
 
-				return Response.json({ answer: toolResult.text });
+				// Call weather API
+				const weatherRes = await fetch('https://devshowdown.com/api/weather', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						[INTERACTION_ID_HEADER]: interactionId,
+					},
+					body: JSON.stringify({ city }),
+				});
+				const weatherData = await weatherRes.json<any>();
+
+				return Response.json({
+					answer: `The weather in ${city} is currently ${weatherData.temperature}.`,
+				});
 			}
 			default:
 				return new Response('Solver not found', {status: 404});
