@@ -77,51 +77,30 @@ export default {
 					throw new Error('DEV_SHOWDOWN_API_KEY is required');
 				}
 
+				// Step 1: Extract city using LLM
 				const toolLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
-				const toolResult = await generateText({
+				const cityResult = await generateText({
 					model: toolLlm.chatModel('deli-4'),
-					system: 'You answer weather questions. Use the getWeather tool to look up the weather, then answer the user with a sentence that includes the temperature.',
+					system: 'Extract the city name from the user question. Reply with ONLY the city name, nothing else.',
 					prompt: payload.question,
-					tools: {
-						getWeather: {
-							description: 'Get current weather for a city',
-							parameters: {
-								type: 'object' as const,
-								properties: {
-									city: { type: 'string' as const, description: 'The city name' },
-								},
-								required: ['city'],
-							},
-							execute: async ({ city }: { city: string }) => {
-								const res = await fetch('https://devshowdown.com/api/weather', {
-									method: 'POST',
-									headers: {
-										'Content-Type': 'application/json',
-										[INTERACTION_ID_HEADER]: interactionId,
-									},
-									body: JSON.stringify({ city }),
-								});
-								return await res.json();
-							},
-						},
-					},
-					maxSteps: 3,
 				});
+				const city = cityResult.text.trim();
 
-				// Fallback: if LLM text is empty, build answer from tool results
-				let answer = toolResult.text;
-				if (!answer) {
-					for (const step of toolResult.steps) {
-						for (const result of step.toolResults) {
-							const data = result.result as any;
-							if (data?.temperatureFahrenheit != null) {
-								answer = `The weather in ${data.city} is currently ${data.temperatureFahrenheit}\u00B0F.`;
-							}
-						}
-					}
-				}
+				// Step 2: Call weather API directly
+				const weatherRes = await fetch('https://devshowdown.com/api/weather', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						[INTERACTION_ID_HEADER]: interactionId,
+					},
+					body: JSON.stringify({ city }),
+				});
+				const weatherData = await weatherRes.json<any>();
 
-				return Response.json({ answer: answer || 'Unable to fetch weather.' });
+				// Step 3: Build response
+				return Response.json({
+					answer: `The weather in ${weatherData.city} is currently ${weatherData.temperatureFahrenheit}\u00B0F.`,
+				});
 			}
 			default:
 				return new Response('Solver not found', {status: 404});
