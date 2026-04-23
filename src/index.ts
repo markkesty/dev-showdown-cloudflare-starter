@@ -58,7 +58,7 @@ export default {
 					model: jsonLlm.chatModel('deli-4'),
 					system: `Extract structured product information from the description. Return ONLY a valid JSON object with this exact structure, no markdown fences:
 {
-  "name": "<full product name>",
+  "name": "<full product name including the product type, e.g. 'Vector Harbor A142 chair'>",
   "price": <number>,
   "currency": "<3-letter code>",
   "inStock": <true if "in stock", false if "out of stock">,
