@@ -102,6 +102,26 @@ export default {
 					answer: `The weather in ${weatherData.city} is currently ${weatherData.temperatureFahrenheit}\u00B0F.`,
 				});
 			}
+			case 'SINGLE_DOCUMENT_KB_RETRIEVAL': {
+				if (!env.DEV_SHOWDOWN_API_KEY) {
+					throw new Error('DEV_SHOWDOWN_API_KEY is required');
+				}
+
+				// Fetch the knowledge base document
+				const kbRes = await fetch('https://devshowdown.com/api/kb/document', {
+					headers: { [INTERACTION_ID_HEADER]: interactionId },
+				});
+				const kbDocument = await kbRes.text();
+
+				const kbLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+				const kbResult = await generateText({
+					model: kbLlm.chatModel('deli-4'),
+					system: `Answer the question based ONLY on the following document. Be concise and accurate.\n\n${kbDocument}`,
+					prompt: payload.question,
+				});
+
+				return Response.json({ answer: kbResult.text });
+			}
 			case 'RESPONSE_STREAMING': {
 				if (!env.DEV_SHOWDOWN_API_KEY) {
 					throw new Error('DEV_SHOWDOWN_API_KEY is required');
