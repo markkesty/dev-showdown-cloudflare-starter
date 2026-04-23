@@ -72,6 +72,45 @@ export default {
 				const parsed = JSON.parse(jsonResult.text.replace(/```json\n?|```\n?/g, '').trim());
 				return Response.json(parsed);
 			}
+			case 'BASIC_TOOL_CALL': {
+				if (!env.DEV_SHOWDOWN_API_KEY) {
+					throw new Error('DEV_SHOWDOWN_API_KEY is required');
+				}
+
+				const toolLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+
+				const toolResult = await generateText({
+					model: toolLlm.chatModel('deli-4'),
+					system: 'You answer questions about weather. Use the getWeather tool to fetch current weather data, then respond with a natural language answer that includes the temperature.',
+					prompt: payload.question,
+					tools: {
+						getWeather: {
+							description: 'Get current weather for a city',
+							parameters: {
+								type: 'object' as const,
+								properties: {
+									city: { type: 'string' as const, description: 'City name' },
+								},
+								required: ['city'],
+							},
+							execute: async ({ city }: { city: string }) => {
+								const weatherRes = await fetch('https://devshowdown.com/api/weather', {
+									method: 'POST',
+									headers: {
+										'Content-Type': 'application/json',
+										[INTERACTION_ID_HEADER]: interactionId,
+									},
+									body: JSON.stringify({ city }),
+								});
+								return await weatherRes.json();
+							},
+						},
+					},
+					maxSteps: 3,
+				});
+
+				return Response.json({ answer: toolResult.text });
+			}
 			default:
 				return new Response('Solver not found', {status: 404});
 		}
