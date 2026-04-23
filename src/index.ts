@@ -73,18 +73,9 @@ export default {
 				return Response.json(parsed);
 			}
 			case 'BASIC_TOOL_CALL': {
-				if (!env.DEV_SHOWDOWN_API_KEY) {
-					throw new Error('DEV_SHOWDOWN_API_KEY is required');
-				}
-
-				// Extract city name using LLM
-				const toolLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
-				const cityResult = await generateText({
-					model: toolLlm.chatModel('deli-4'),
-					system: 'Extract the city name from the question. Reply with ONLY the city name, nothing else.',
-					prompt: payload.question,
-				});
-				const city = cityResult.text.trim();
+				// Extract city from question - match "in <City>" pattern
+				const cityMatch = payload.question.match(/\bin\s+([A-Z][a-zA-Z\s]+?)(?:\s+right now|\s+today|\s+currently|\s+at the moment|\?|$)/i);
+				const city = cityMatch ? cityMatch[1].trim() : payload.question;
 
 				// Call weather API
 				const weatherRes = await fetch('https://devshowdown.com/api/weather', {
