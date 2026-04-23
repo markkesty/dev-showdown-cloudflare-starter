@@ -1,5 +1,6 @@
 import {createOpenAICompatible} from '@ai-sdk/openai-compatible';
-import {generateText} from 'ai';
+import {generateObject, generateText} from 'ai';
+import {z} from 'zod';
 
 const INTERACTION_ID_HEADER = 'X-Interaction-Id';
 
@@ -53,16 +54,39 @@ export default {
 					throw new Error('DEV_SHOWDOWN_API_KEY is required');
 				}
 
-				const workshopLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
-				const result = await generateText({
-					model: workshopLlm.chatModel('deli-4'),
-					system: 'You are a trivia question player. Answer the question correctly and concisely.',
-					prompt: payload.question,
+				const jsonLlm = createWorkshopLlm(env.DEV_SHOWDOWN_API_KEY, interactionId);
+
+				const productSchema = z.object({
+					name: z.string(),
+					price: z.number(),
+					currency: z.string(),
+					inStock: z.boolean(),
+					dimensions: z.object({
+						length: z.number(),
+						width: z.number(),
+						height: z.number(),
+						unit: z.string(),
+					}),
+					manufacturer: z.object({
+						name: z.string(),
+						country: z.string(),
+						website: z.string(),
+					}),
+					specifications: z.object({
+						weight: z.number(),
+						weightUnit: z.string(),
+						warrantyMonths: z.number(),
+					}),
 				});
 
-				return Response.json({
-					answer: result.text || 'N/A',
+				const jsonResult = await generateObject({
+					model: jsonLlm.chatModel('deli-4'),
+					schema: productSchema,
+					system: `Extract structured product information from the given description. Return exact values from the text. For inStock: "in stock" = true, "out of stock" = false. For dimensions, extract the numeric values and unit. For warranty, extract the number of months.`,
+					prompt: payload.description,
 				});
+
+				return Response.json(jsonResult.object);
 			}
 			default:
 				return new Response('Solver not found', {status: 404});
